@@ -329,7 +329,24 @@ function statusBadge(s) {
 }
 
 function parseDate(row) {
-  const raw = row['Audit Date'] || row['Timestamp'] || '';
+  // 1. Best: use GViz raw date value "Date(year,month0,day)" — locale-independent
+  const gvizRaw = row['__gviz_Audit Date'] || row['__gviz_Timestamp'];
+  if (gvizRaw) {
+    const m = String(gvizRaw).match(/Date\((\d+),(\d+),(\d+)/);
+    if (m) return new Date(parseInt(m[1]), parseInt(m[2]), parseInt(m[3]));
+  }
+
+  // 2. Fallback: parse formatted string handling DD/MM/YYYY and MM/DD/YYYY
+  const raw = (row['Audit Date'] || row['Timestamp'] || '').trim();
+  if (!raw) return null;
+  const parts = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (parts) {
+    const [, p1, p2, yr] = parts;
+    // If day > 12 it must be DD/MM/YYYY; otherwise assume MM/DD/YYYY
+    if (parseInt(p1) > 12) return new Date(parseInt(yr), parseInt(p2) - 1, parseInt(p1));
+    return new Date(parseInt(yr), parseInt(p1) - 1, parseInt(p2));
+  }
+
   const d = new Date(raw);
   return isNaN(d) ? null : d;
 }
@@ -341,23 +358,29 @@ function formatDate(d) {
 
 /* ── GViz JSONP parser ── */
 function parseGViz(resp) {
-  const cols = resp.table.cols.map(c => c.label || c.id);
+  // Keep both label and type so we can handle date columns correctly
+  const cols = resp.table.cols.map(c => ({ label: c.label || c.id, type: c.type }));
   return (resp.table.rows || [])
     .map(row => {
       const obj = {};
       (row.c || []).forEach((cell, i) => {
-        if (!cols[i]) return;
+        const col = cols[i];
+        if (!col) return;
         let val = '';
         if (cell !== null && cell !== undefined) {
-          // prefer formatted string, fall back to raw value
           val = (cell.f !== null && cell.f !== undefined) ? String(cell.f)
               : (cell.v !== null && cell.v !== undefined) ? String(cell.v) : '';
+          // For date/datetime columns store the raw GViz value separately
+          // GViz encodes dates as "Date(year,month0,day)" — far more reliable than formatted strings
+          if ((col.type === 'date' || col.type === 'datetime') && cell.v != null) {
+            obj['__gviz_' + col.label] = String(cell.v);
+          }
         }
-        obj[cols[i]] = val;
+        obj[col.label] = val;
       });
       return obj;
     })
-    .filter(r => Object.values(r).some(v => v.trim()));
+    .filter(r => Object.values(r).some(v => typeof v === 'string' && v.trim()));
 }
 
 /* ── Load via JSONP (works from file://) ── */
@@ -435,8 +458,9 @@ function applyFilters() {
     if (status  && row._status !== status) return false;
     if (dateFrom || dateTo) {
       if (!row._date) return true;
-      if (dateFrom && row._date < new Date(dateFrom)) return false;
-      if (dateTo   && row._date > new Date(dateTo + 'T23:59:59')) return false;
+      // Use local midnight to avoid UTC timezone offset issues (IST = UTC+5:30)
+      if (dateFrom && row._date < new Date(dateFrom + 'T00:00:00')) return false;
+      if (dateTo   && row._date > new Date(dateTo   + 'T23:59:59')) return false;
     }
     return true;
   });
