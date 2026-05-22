@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management — LED Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .badge-admin { background:#dbeafe; color:#1d4ed8; }
+    .badge-user  { background:#dcfce7; color:#15803d; }
+    .badge-inactive { background:#fee2e2; color:#b91c1c; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+  <!-- Auth loading overlay -->
+  <div id="authOverlay" class="fixed inset-0 bg-white flex items-center justify-center z-50">
+    <div class="text-center">
+      <div class="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
+      <p class="text-slate-500 text-sm">Verifying access…</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between shadow-lg">
+    <div class="flex items-center gap-4">
+      <a href="index.html" class="text-slate-400 hover:text-white text-sm transition-colors">← Dashboard</a>
+      <div>
+        <h1 class="text-lg font-bold tracking-tight">User Management</h1>
+        <p class="text-slate-400 text-xs mt-0.5">Admin Panel</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <div id="adminInfo" class="hidden items-center gap-2">
+        <img id="adminAvatar" src="" alt="" class="w-7 h-7 rounded-full object-cover">
+        <span id="adminName" class="text-slate-300 text-sm hidden sm:inline"></span>
+        <span class="badge-admin text-xs px-2 py-0.5 rounded-full font-semibold">Admin</span>
+      </div>
+      <button onclick="doSignOut()"
+        class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
+        Sign out
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-6 py-8">
+
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4 mb-8">
+      <div class="bg-white rounded-xl p-5 border border-slate-100 shadow-sm text-center">
+        <p class="text-3xl font-bold text-slate-900" id="statTotal">—</p>
+        <p class="text-xs text-slate-500 mt-1 uppercase font-semibold tracking-wide">Total Users</p>
+      </div>
+      <div class="bg-white rounded-xl p-5 border border-blue-100 shadow-sm text-center">
+        <p class="text-3xl font-bold text-blue-600" id="statAdmins">—</p>
+        <p class="text-xs text-blue-500 mt-1 uppercase font-semibold tracking-wide">Admins</p>
+      </div>
+      <div class="bg-white rounded-xl p-5 border border-green-100 shadow-sm text-center">
+        <p class="text-3xl font-bold text-green-600" id="statViewers">—</p>
+        <p class="text-xs text-green-500 mt-1 uppercase font-semibold tracking-wide">Viewers</p>
+      </div>
+    </div>
+
+    <!-- Add User -->
+    <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-5 mb-6">
+      <h2 class="text-sm font-semibold text-slate-700 mb-4">Add New User</h2>
+      <div class="flex gap-3 flex-wrap">
+        <input type="email" id="newEmail" placeholder="user@whitegold.money or user@whitegroup.in"
+          class="flex-1 min-w-56 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          onkeydown="if(event.key==='Enter') addUser()">
+        <select id="newRole"
+          class="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="user">Viewer (View only)</option>
+          <option value="admin">Admin (Full access)</option>
+        </select>
+        <button onclick="addUser()" id="addBtn"
+          class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors">
+          Add User
+        </button>
+      </div>
+      <p id="addMsg" class="hidden mt-3 text-xs px-3 py-2 rounded-lg"></p>
+    </div>
+
+    <!-- Users Table -->
+    <div class="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-700">All Users</h2>
+        <span class="text-xs text-slate-400" id="tableInfo"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-slate-50 text-xs uppercase text-slate-500 font-semibold border-b border-slate-100 tracking-wide">
+              <th class="px-5 py-3 text-left">User</th>
+              <th class="px-5 py-3 text-left">Role</th>
+              <th class="px-5 py-3 text-left">Status</th>
+              <th class="px-5 py-3 text-left">Added By</th>
+              <th class="px-5 py-3 text-left">Last Login</th>
+              <th class="px-5 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody" class="divide-y divide-slate-50">
+            <tr><td colspan="6" class="px-5 py-10 text-center text-slate-400">Loading users…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Confirm Dialog -->
+  <div id="confirmDialog" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+      <h3 class="font-bold text-slate-800 mb-2" id="confirmTitle">Confirm</h3>
+      <p class="text-slate-500 text-sm mb-6" id="confirmMsg"></p>
+      <div class="flex gap-3 justify-end">
+        <button onclick="closeConfirm()" class="px-4 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50">Cancel</button>
+        <button id="confirmOkBtn" class="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold">Remove</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyArr7vqYMNUOdtvSxmW16pFebHxxMVHMBA",
+    authDomain: "led-dashboard-7d107.firebaseapp.com",
+    projectId: "led-dashboard-7d107",
+    storageBucket: "led-dashboard-7d107.firebasestorage.app",
+    messagingSenderId: "93470281408",
+    appId: "1:93470281408:web:a4075f3b6d324b891be725"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db   = firebase.firestore();
+
+  const ALLOWED_DOMAINS = ['whitegold.money', 'whitegroup.in'];
+  let currentAdminEmail = '';
+
+  function initials(name) {
+    return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  }
+
+  function formatTs(ts) {
+    if (!ts) return '—';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  // Auth guard — must be logged in as admin
+  auth.onAuthStateChanged(async user => {
+    if (!user) { window.location.replace('login.html'); return; }
+
+    try {
+      const snap = await db.collection('users').doc(user.email).get();
+      if (!snap.exists || !snap.data().active || snap.data().role !== 'admin') {
+        await auth.signOut();
+        window.location.replace('login.html');
+        return;
+      }
+    } catch(e) {
+      window.location.replace('login.html');
+      return;
+    }
+
+    currentAdminEmail = user.email;
+    const adminInfo = document.getElementById('adminInfo');
+    adminInfo.style.display = 'flex';
+    document.getElementById('adminName').textContent = user.displayName || user.email;
+    if (user.photoURL) document.getElementById('adminAvatar').src = user.photoURL;
+    else document.getElementById('adminAvatar').style.display = 'none';
+    document.getElementById('authOverlay').style.display = 'none';
+    loadUsers();
+  });
+
+  function loadUsers() {
+    db.collection('users').orderBy('addedAt', 'asc').onSnapshot(snapshot => {
+      const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderStats(users);
+      renderTable(users);
+    }, err => {
+      document.getElementById('userTableBody').innerHTML =
+        `<tr><td colspan="6" class="px-5 py-8 text-center text-red-500">Error loading users: ${err.message}</td></tr>`;
+    });
+  }
+
+  function renderStats(users) {
+    document.getElementById('statTotal').textContent   = users.length;
+    document.getElementById('statAdmins').textContent  = users.filter(u => u.role === 'admin').length;
+    document.getElementById('statViewers').textContent = users.filter(u => u.role === 'user').length;
+    document.getElementById('tableInfo').textContent   = `${users.length} user${users.length !== 1 ? 's' : ''}`;
+  }
+
+  function renderTable(users) {
+    if (users.length === 0) {
+      document.getElementById('userTableBody').innerHTML =
+        '<tr><td colspan="6" class="px-5 py-10 text-center text-slate-400">No users yet.</td></tr>';
+      return;
+    }
+
+    document.getElementById('userTableBody').innerHTML = users.map(u => {
+      const roleBadge = u.role === 'admin'
+        ? '<span class="badge-admin text-xs font-semibold px-2.5 py-1 rounded-full">Admin</span>'
+        : '<span class="badge-user text-xs font-semibold px-2.5 py-1 rounded-full">Viewer</span>';
+
+      const statusBadge = u.active
+        ? '<span class="bg-green-50 text-green-700 text-xs font-semibold px-2.5 py-1 rounded-full">Active</span>'
+        : '<span class="badge-inactive text-xs font-semibold px-2.5 py-1 rounded-full">Inactive</span>';
+
+      const avatarHtml = u.photo
+        ? `<img src="${u.photo}" alt="" class="w-8 h-8 rounded-full object-cover flex-shrink-0">`
+        : `<div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">${initials(u.name)}</div>`;
+
+      const isSelf = u.email === currentAdminEmail;
+
+      const toggleLabel = u.active ? 'Deactivate' : 'Activate';
+      const toggleClass = u.active
+        ? 'text-amber-600 hover:text-amber-800'
+        : 'text-green-600 hover:text-green-800';
+
+      const otherRole    = u.role === 'admin' ? 'user' : 'admin';
+      const roleLabel    = u.role === 'admin' ? 'Make Viewer' : 'Make Admin';
+
+      const actions = isSelf
+        ? '<span class="text-xs text-slate-400 italic">You</span>'
+        : `<div class="flex items-center gap-3 justify-end flex-wrap">
+            <button onclick="toggleActive('${u.email}', ${!u.active})" class="text-xs font-medium ${toggleClass} transition-colors">${toggleLabel}</button>
+            <button onclick="changeRole('${u.email}', '${otherRole}')" class="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors">${roleLabel}</button>
+            <button onclick="confirmRemove('${u.email}', '${(u.name || u.email).replace(/'/g,"\\'")}') " class="text-xs font-medium text-red-500 hover:text-red-700 transition-colors">Remove</button>
+           </div>`;
+
+      return `
+        <tr class="hover:bg-slate-50 transition-colors">
+          <td class="px-5 py-3">
+            <div class="flex items-center gap-3">
+              ${avatarHtml}
+              <div>
+                <p class="font-medium text-slate-800 text-sm">${u.name || '—'}</p>
+                <p class="text-xs text-slate-400">${u.email}</p>
+              </div>
+            </div>
+          </td>
+          <td class="px-5 py-3">${roleBadge}</td>
+          <td class="px-5 py-3">${statusBadge}</td>
+          <td class="px-5 py-3 text-xs text-slate-500">${u.addedBy === 'system' ? 'System' : (u.addedBy || '—')}</td>
+          <td class="px-5 py-3 text-xs text-slate-500">${formatTs(u.lastLogin)}</td>
+          <td class="px-5 py-3 text-right">${actions}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  function showAddMsg(text, type) {
+    const el = document.getElementById('addMsg');
+    el.textContent = text;
+    el.className = `mt-3 text-xs px-3 py-2 rounded-lg ${
+      type === 'error'   ? 'bg-red-50 text-red-700' :
+      type === 'success' ? 'bg-green-50 text-green-700' :
+                           'bg-blue-50 text-blue-700'}`;
+    el.classList.remove('hidden');
+    setTimeout(() => el.classList.add('hidden'), 4000);
+  }
+
+  async function addUser() {
+    const email = document.getElementById('newEmail').value.trim().toLowerCase();
+    const role  = document.getElementById('newRole').value;
+
+    if (!email) { showAddMsg('Please enter an email address.', 'error'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showAddMsg('Enter a valid email address.', 'error'); return; }
+
+    const domain = email.split('@')[1];
+    if (!ALLOWED_DOMAINS.includes(domain)) {
+      showAddMsg(`Only @whitegold.money and @whitegroup.in emails are allowed.`, 'error');
+      return;
+    }
+
+    const btn = document.getElementById('addBtn');
+    btn.disabled = true;
+    btn.textContent = 'Adding…';
+
+    try {
+      const ref  = db.collection('users').doc(email);
+      const snap = await ref.get();
+      if (snap.exists) {
+        showAddMsg('This user already exists.', 'error');
+        return;
+      }
+      await ref.set({
+        email,
+        name: email.split('@')[0],
+        photo: '',
+        role,
+        active: true,
+        addedBy: currentAdminEmail,
+        addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        lastLogin: null
+      });
+      document.getElementById('newEmail').value = '';
+      showAddMsg(`${email} added as ${role === 'admin' ? 'Admin' : 'Viewer'}.`, 'success');
+    } catch(e) {
+      showAddMsg('Error: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Add User';
+    }
+  }
+
+  async function toggleActive(email, active) {
+    try { await db.collection('users').doc(email).update({ active }); }
+    catch(e) { alert('Error: ' + e.message); }
+  }
+
+  async function changeRole(email, role) {
+    try { await db.collection('users').doc(email).update({ role }); }
+    catch(e) { alert('Error: ' + e.message); }
+  }
+
+  let pendingRemoveEmail = null;
+  function confirmRemove(email, name) {
+    pendingRemoveEmail = email;
+    document.getElementById('confirmTitle').textContent = 'Remove User';
+    document.getElementById('confirmMsg').textContent   = `Remove ${name} (${email}) from the dashboard? They will lose access immediately.`;
+    document.getElementById('confirmDialog').classList.remove('hidden');
+  }
+  function closeConfirm() {
+    pendingRemoveEmail = null;
+    document.getElementById('confirmDialog').classList.add('hidden');
+  }
+  document.getElementById('confirmOkBtn').onclick = async () => {
+    if (!pendingRemoveEmail) return;
+    try {
+      await db.collection('users').doc(pendingRemoveEmail).delete();
+      closeConfirm();
+    } catch(e) { alert('Error: ' + e.message); }
+  };
+
+  async function doSignOut() {
+    await auth.signOut();
+    window.location.replace('login.html');
+  }
+</script>
+</body>
+</html>

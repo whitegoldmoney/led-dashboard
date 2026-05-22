@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — LED Board Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+
+  <div class="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="w-16 h-16 bg-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg">
+        <svg class="w-9 h-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        </svg>
+      </div>
+      <h1 class="text-xl font-bold text-slate-900">White Gold Money</h1>
+      <p class="text-slate-500 text-sm mt-1">LED Board Audit Dashboard</p>
+    </div>
+
+    <div id="msgBox" class="hidden mb-5 px-4 py-3 rounded-xl text-sm leading-relaxed"></div>
+
+    <button id="signInBtn" onclick="signIn()"
+      class="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 rounded-xl py-3 px-4 font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm text-sm">
+      <svg class="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Continue with Google
+    </button>
+
+    <p class="text-center text-xs text-slate-400 mt-5 leading-relaxed">
+      Access restricted to<br>
+      <span class="font-semibold text-slate-600">@whitegold.money</span> and
+      <span class="font-semibold text-slate-600">@whitegroup.in</span>
+    </p>
+  </div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyArr7vqYMNUOdtvSxmW16pFebHxxMVHMBA",
+    authDomain: "led-dashboard-7d107.firebaseapp.com",
+    projectId: "led-dashboard-7d107",
+    storageBucket: "led-dashboard-7d107.firebasestorage.app",
+    messagingSenderId: "93470281408",
+    appId: "1:93470281408:web:a4075f3b6d324b891be725"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db   = firebase.firestore();
+
+  const ALLOWED_DOMAINS  = ['whitegold.money', 'whitegroup.in'];
+  const BOOTSTRAP_ADMIN  = 'shafiulla@whitegold.money';
+
+  function showMsg(text, type) {
+    const box = document.getElementById('msgBox');
+    box.innerHTML = text;
+    const styles = {
+      error:   'bg-red-50 text-red-700 border border-red-200',
+      warning: 'bg-amber-50 text-amber-700 border border-amber-200',
+      info:    'bg-blue-50 text-blue-700 border border-blue-200',
+      success: 'bg-green-50 text-green-700 border border-green-200',
+    };
+    box.className = `mb-5 px-4 py-3 rounded-xl text-sm leading-relaxed ${styles[type] || styles.info}`;
+    box.classList.remove('hidden');
+  }
+
+  function setBtn(loading) {
+    const btn = document.getElementById('signInBtn');
+    btn.disabled = loading;
+    btn.innerHTML = loading
+      ? `<svg class="w-4 h-4 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
+           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+         </svg> Signing in…`
+      : `<svg class="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
+           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+           <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+           <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+           <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+         </svg> Continue with Google`;
+  }
+
+  // If already authenticated and approved → skip login
+  auth.onAuthStateChanged(async user => {
+    if (!user) return;
+    const domain = user.email.split('@')[1];
+    if (!ALLOWED_DOMAINS.includes(domain)) { await auth.signOut(); return; }
+    try {
+      const snap = await db.collection('users').doc(user.email).get();
+      if (snap.exists && snap.data().active) window.location.replace('index.html');
+    } catch(_) {}
+  });
+
+  async function signIn() {
+    setBtn(true);
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const { user } = await auth.signInWithPopup(provider);
+      const email  = user.email;
+      const domain = email.split('@')[1];
+
+      if (!ALLOWED_DOMAINS.includes(domain)) {
+        await auth.signOut();
+        showMsg('Access denied. Only <strong>@whitegold.money</strong> and <strong>@whitegroup.in</strong> accounts are allowed.', 'error');
+        setBtn(false);
+        return;
+      }
+
+      const ref  = db.collection('users').doc(email);
+      const snap = await ref.get();
+
+      if (!snap.exists) {
+        if (email === BOOTSTRAP_ADMIN) {
+          // First-time admin bootstrap
+          await ref.set({
+            email,
+            name: user.displayName || 'Admin',
+            photo: user.photoURL || '',
+            role: 'admin',
+            active: true,
+            addedBy: 'system',
+            addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          window.location.replace('index.html');
+        } else {
+          await auth.signOut();
+          showMsg('Your email domain is eligible but you haven\'t been added yet.<br>Contact <strong>shafiulla@whitegold.money</strong> to request access.', 'warning');
+          setBtn(false);
+        }
+        return;
+      }
+
+      const data = snap.data();
+      if (!data.active) {
+        await auth.signOut();
+        showMsg('Your account has been deactivated. Contact your administrator.', 'error');
+        setBtn(false);
+        return;
+      }
+
+      await ref.update({ lastLogin: firebase.firestore.FieldValue.serverTimestamp() });
+      window.location.replace('index.html');
+
+    } catch(e) {
+      if (e.code !== 'auth/popup-closed-by-user') {
+        showMsg('Sign-in failed: ' + (e.message || 'Unknown error'), 'error');
+      }
+      setBtn(false);
+    }
+  }
+</script>
+</body>
+</html>

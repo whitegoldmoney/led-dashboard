@@ -6,6 +6,9 @@
   <title>LED Board Audit Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; }
     .stat-card { transition: transform 0.15s ease; }
@@ -22,6 +25,14 @@
 </head>
 <body class="bg-slate-50 min-h-screen">
 
+  <!-- Auth loading overlay -->
+  <div id="authOverlay" class="fixed inset-0 bg-white flex items-center justify-center z-50">
+    <div class="text-center">
+      <div class="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
+      <p class="text-slate-500 text-sm">Verifying access…</p>
+    </div>
+  </div>
+
   <!-- Header -->
   <header class="bg-slate-900 text-white px-6 py-4 flex flex-wrap items-center justify-between gap-3 shadow-lg">
     <div>
@@ -30,12 +41,26 @@
     </div>
     <div class="flex items-center gap-3">
       <span id="totalBadge" class="hidden bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded-full font-medium"></span>
+      <!-- User info (populated after auth) -->
+      <div id="userInfo" style="display:none" class="items-center gap-2 flex">
+        <img id="userAvatar" src="" alt="" class="w-7 h-7 rounded-full object-cover">
+        <span id="userName" class="text-slate-300 text-sm hidden sm:inline"></span>
+        <span id="userRoleBadge" class="text-xs px-2 py-0.5 rounded-full font-semibold"></span>
+      </div>
+      <a id="adminLink" href="admin.html" style="display:none"
+        class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+        Manage Users
+      </a>
       <button onclick="loadData()" id="refreshBtn"
         class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
         </svg>
         Refresh
+      </button>
+      <button onclick="doSignOut()"
+        class="bg-slate-700 hover:bg-slate-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
+        Sign out
       </button>
     </div>
   </header>
@@ -217,6 +242,59 @@
   </div>
 
 <script>
+/* ── Firebase Auth ── */
+const firebaseConfig = {
+  apiKey: "AIzaSyArr7vqYMNUOdtvSxmW16pFebHxxMVHMBA",
+  authDomain: "led-dashboard-7d107.firebaseapp.com",
+  projectId: "led-dashboard-7d107",
+  storageBucket: "led-dashboard-7d107.firebasestorage.app",
+  messagingSenderId: "93470281408",
+  appId: "1:93470281408:web:a4075f3b6d324b891be725"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+firebase.auth().onAuthStateChanged(async user => {
+  if (!user) { window.location.replace('login.html'); return; }
+  try {
+    const snap = await db.collection('users').doc(user.email).get();
+    if (!snap.exists || !snap.data().active) {
+      await auth.signOut();
+      window.location.replace('login.html');
+      return;
+    }
+    const data = snap.data();
+    // Show user info in header
+    document.getElementById('userInfo').style.display = 'flex';
+    document.getElementById('userName').textContent   = user.displayName || user.email;
+    if (user.photoURL) document.getElementById('userAvatar').src = user.photoURL;
+    else document.getElementById('userAvatar').style.display = 'none';
+    const badge = document.getElementById('userRoleBadge');
+    if (data.role === 'admin') {
+      badge.textContent  = 'Admin';
+      badge.style.background = '#dbeafe';
+      badge.style.color      = '#1d4ed8';
+      document.getElementById('adminLink').style.display = 'inline-flex';
+    } else {
+      badge.textContent  = 'Viewer';
+      badge.style.background = '#dcfce7';
+      badge.style.color      = '#15803d';
+    }
+  } catch(e) {
+    window.location.replace('login.html');
+    return;
+  }
+  document.getElementById('authOverlay').style.display = 'none';
+  loadData();
+});
+
+async function doSignOut() {
+  await firebase.auth().signOut();
+  window.location.replace('login.html');
+}
+
+/* ── Dashboard ── */
 const SHEET_ID  = '1RL0XfQnx_LXHOMFcJ72kYw_08tWLV3ucrS0pYTQLkTU';
 const SHEET_GID = '868182336';
 const PAGE_SIZE = 25;
@@ -668,8 +746,7 @@ function closeModal() { document.getElementById('modal').classList.remove('open'
 document.getElementById('modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-/* ── Boot ── */
-loadData();
+/* loadData() is called by the auth observer above after login is confirmed */
 </script>
 </body>
 </html>
