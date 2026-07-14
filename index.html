@@ -6,6 +6,7 @@
   <title>LED Board Audit Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -334,6 +335,8 @@ async function doSignOut() {
 }
 
 /* ── Dashboard ── */
+Chart.register(ChartDataLabels);
+
 const SHEET_ID  = '1RL0XfQnx_LXHOMFcJ72kYw_08tWLV3ucrS0pYTQLkTU';
 const SHEET_GID = '868182336';
 const PAGE_SIZE = 25;
@@ -576,7 +579,17 @@ function updateCharts() {
       cutout: '68%',
       plugins: {
         legend: { position: 'bottom', labels: { padding: 16, font: { size: 12 } } },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} (${filteredData.length ? Math.round(ctx.raw / filteredData.length * 100) : 0}%)` } }
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} (${filteredData.length ? Math.round(ctx.raw / filteredData.length * 100) : 0}%)` } },
+        datalabels: {
+          color: '#fff',
+          font: { weight: 'bold', size: 12 },
+          display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+          formatter: (value, ctx) => {
+            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+            if (!total) return '';
+            return `${value}\n${Math.round(value / total * 100)}%`;
+          }
+        }
       }
     }
   });
@@ -594,8 +607,19 @@ function updateCharts() {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } } }, x: { ticks: { font: { size: 11 } } } }
+      layout: { padding: { top: 20 } },
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          anchor: 'end', align: 'end',
+          color: '#1e293b', font: { weight: 'bold', size: 13 },
+          formatter: value => value
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grace: '15%' },
+        x: { ticks: { font: { size: 11 } } }
+      }
     }
   });
 
@@ -621,8 +645,19 @@ function updateCharts() {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } } }, x: { ticks: { font: { size: 11 } } } }
+      layout: { padding: { top: 20 } },
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          anchor: 'end', align: 'top', offset: 4,
+          color: '#6366f1', font: { weight: 'bold', size: 11 },
+          formatter: value => value
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grace: '20%' },
+        x: { ticks: { font: { size: 11 } } }
+      }
     }
   });
 
@@ -659,8 +694,20 @@ function buildBrandChart() {
     options: {
       indexAxis: 'y',
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { x: { beginAtZero: true, ticks: { font: { size: 11 } } }, y: { ticks: { font: { size: 10 } } } }
+      layout: { padding: { right: 30 } },
+      plugins: {
+        legend: { display: false },
+        datalabels: {
+          anchor: 'end', align: 'right', offset: 4,
+          color: '#1e293b', font: { weight: 'bold', size: 11 },
+          formatter: value => value,
+          clip: false
+        }
+      },
+      scales: {
+        x: { beginAtZero: true, ticks: { font: { size: 11 } }, grace: '15%' },
+        y: { ticks: { font: { size: 10 } } }
+      }
     }
   });
 }
@@ -700,6 +747,7 @@ function buildSlotChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 24 } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -707,12 +755,19 @@ function buildSlotChart() {
             title: ctx => labels[ctx[0].dataIndex],
             label: ctx => ` ${ctx.raw} board${ctx.raw !== 1 ? 's' : ''}`
           }
+        },
+        datalabels: {
+          anchor: 'end', align: 'end',
+          color: ctx => slotNums[ctx.dataIndex] === 0 ? '#ef4444' : '#1e293b',
+          font: { weight: 'bold', size: 12 },
+          formatter: value => value
         }
       },
       scales: {
         y: {
           beginAtZero: true,
           ticks: { stepSize: 1, font: { size: 11 } },
+          grace: '20%',
           title: { display: true, text: 'Number of boards', font: { size: 11 }, color: '#94a3b8' }
         },
         x: {
